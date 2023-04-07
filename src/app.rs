@@ -4,6 +4,7 @@ use crate::{
     input_manager::{InputManager, KeyCode},
     renderer::Renderer,
     timer::Timer,
+    timing::Timing,
 };
 use winit::{event_loop, window};
 
@@ -13,9 +14,7 @@ pub struct App {
     renderer: Renderer,
     input_manager: InputManager,
     should_exit: bool,
-    start_instant: time::Instant,
-    last_frame_instant: time::Instant,
-    timer: Timer,
+    timing: Timing,
 }
 
 impl App {
@@ -30,19 +29,14 @@ impl App {
 
         let input_manager = InputManager::new();
         let should_exit = false;
-        let start_instant = time::Instant::now();
-        let last_frame_instant = time::Instant::now();
-        let mut timer = Timer::new(std::time::Duration::from_secs(3), true);
-        timer.start();
+        let timing = Timing::new();
         Ok(Self {
             event_loop,
             window,
             renderer,
             input_manager,
             should_exit,
-            start_instant,
-            last_frame_instant,
-            timer,
+            timing,
         })
     }
 
@@ -87,36 +81,12 @@ impl App {
             self.should_exit = true
         }
 
-        if self.input_manager.is_key_just_pressed(KeyCode::Space) {
-            if self.timer.started() {
-                self.timer.stop()
-            } else {
-                self.timer.start()
-            }
-        }
-
-        self.timer.update(self.time_delta());
-        println!("Finished: {}", self.timer.finished());
-        println!("{:?}", self.timer.remaining());
-
         self.input_manager.clear();
-        self.last_frame_instant = time::Instant::now()
+        self.timing.update();
     }
 
     fn draw(&mut self) -> anyhow::Result<()> {
         self.renderer.render()?;
         Ok(())
-    }
-
-    fn time_since_start(&self) -> time::Duration {
-        time::Instant::now() - self.start_instant
-    }
-
-    fn time_delta(&self) -> time::Duration {
-        time::Instant::now() - self.last_frame_instant
-    }
-
-    fn fps(&self) -> u32 {
-        (1.0 / self.time_delta().as_secs_f32()) as u32
     }
 }

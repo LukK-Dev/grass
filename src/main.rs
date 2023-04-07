@@ -2,6 +2,7 @@ mod app;
 mod input_manager;
 mod renderer;
 mod timer;
+mod timing;
 
 use app::App;
 
