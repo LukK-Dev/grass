@@ -34,6 +34,8 @@ impl InputManager {
         }
     }
 
+    // is neaded to be called after all main event are cleared and the application logic for this
+    // update is completed
     pub fn clear(&mut self) {
         self.just_pressed_keys.clear();
         self.just_pressed_mouse_buttons.clear();

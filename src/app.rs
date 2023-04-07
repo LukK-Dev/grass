@@ -3,6 +3,7 @@ use std::time;
 use crate::{
     input_manager::{InputManager, KeyCode},
     renderer::Renderer,
+    timer::Timer,
 };
 use winit::{event_loop, window};
 
@@ -14,6 +15,7 @@ pub struct App {
     should_exit: bool,
     start_instant: time::Instant,
     last_frame_instant: time::Instant,
+    timer: Timer,
 }
 
 impl App {
@@ -30,6 +32,8 @@ impl App {
         let should_exit = false;
         let start_instant = time::Instant::now();
         let last_frame_instant = time::Instant::now();
+        let mut timer = Timer::new(std::time::Duration::from_secs(3), true);
+        timer.start();
         Ok(Self {
             event_loop,
             window,
@@ -38,6 +42,7 @@ impl App {
             should_exit,
             start_instant,
             last_frame_instant,
+            timer,
         })
     }
 
@@ -52,8 +57,6 @@ impl App {
             if self.should_exit {
                 control_flow.set_exit()
             }
-
-            self.last_frame_instant = time::Instant::now()
         });
     }
 
@@ -83,6 +86,21 @@ impl App {
         if self.input_manager.is_key_pressed(KeyCode::Escape) {
             self.should_exit = true
         }
+
+        if self.input_manager.is_key_just_pressed(KeyCode::Space) {
+            if self.timer.started() {
+                self.timer.stop()
+            } else {
+                self.timer.start()
+            }
+        }
+
+        self.timer.update(self.time_delta());
+        println!("Finished: {}", self.timer.finished());
+        println!("{:?}", self.timer.remaining());
+
+        self.input_manager.clear();
+        self.last_frame_instant = time::Instant::now()
     }
 
     fn draw(&mut self) -> anyhow::Result<()> {
