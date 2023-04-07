@@ -1,3 +1,5 @@
+use std::time;
+
 use crate::input_manager::{InputManager, KeyCode};
 use winit::{event_loop, window};
 
@@ -6,6 +8,8 @@ pub struct App {
     window: window::Window,
     input_manager: InputManager,
     should_exit: bool,
+    start_instant: time::Instant,
+    last_frame_instant: time::Instant,
 }
 
 impl App {
@@ -16,11 +20,15 @@ impl App {
 
         let input_manager = InputManager::new();
         let should_exit = false;
+        let start_instant = time::Instant::now();
+        let last_frame_instant = time::Instant::now();
         Ok(Self {
             event_loop,
             window,
             input_manager,
             should_exit,
+            start_instant,
+            last_frame_instant,
         })
     }
 
@@ -35,6 +43,8 @@ impl App {
             if self.should_exit {
                 control_flow.set_exit()
             }
+
+            self.last_frame_instant = time::Instant::now()
         });
     }
 
@@ -61,7 +71,26 @@ impl App {
         if self.input_manager.is_key_pressed(KeyCode::Escape) {
             self.should_exit = true
         }
+
+        let mut x = 0;
+        for i in 1..100000 {
+            x += x % i
+        }
+
+        println!("{:?} FPS", self.fps())
     }
 
     fn draw(&mut self) {}
+
+    fn time_since_start(&self) -> time::Duration {
+        time::Instant::now() - self.start_instant
+    }
+
+    fn time_delta(&self) -> time::Duration {
+        time::Instant::now() - self.last_frame_instant
+    }
+
+    fn fps(&self) -> u32 {
+        (1.0 / self.time_delta().as_secs_f32()) as u32
+    }
 }
