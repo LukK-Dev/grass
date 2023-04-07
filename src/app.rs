@@ -1,11 +1,15 @@
 use std::time;
 
-use crate::input_manager::{InputManager, KeyCode};
+use crate::{
+    input_manager::{InputManager, KeyCode},
+    renderer::Renderer,
+};
 use winit::{event_loop, window};
 
 pub struct App {
     event_loop: Option<event_loop::EventLoop<()>>,
     window: window::Window,
+    renderer: Renderer,
     input_manager: InputManager,
     should_exit: bool,
     start_instant: time::Instant,
@@ -13,10 +17,14 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> anyhow::Result<Self> {
+    pub async fn new() -> anyhow::Result<Self> {
+        tracing_subscriber::fmt::init();
+
         let event_loop = event_loop::EventLoop::new();
         let window = window::WindowBuilder::new().build(&event_loop)?;
         let event_loop = Some(event_loop);
+
+        let renderer = Renderer::new(&window).await?;
 
         let input_manager = InputManager::new();
         let should_exit = false;
@@ -25,6 +33,7 @@ impl App {
         Ok(Self {
             event_loop,
             window,
+            renderer,
             input_manager,
             should_exit,
             start_instant,
@@ -56,13 +65,16 @@ impl App {
                 if let winit::event::WindowEvent::CloseRequested = event {
                     self.should_exit = true;
                 }
+                if let winit::event::WindowEvent::Resized(size) = event {
+                    self.renderer.resize(size.width, size.height).unwrap()
+                }
                 self.input_manager.update(event)
             }
             winit::event::Event::MainEventsCleared => {
                 self.update();
                 self.window.request_redraw()
             }
-            winit::event::Event::RedrawRequested(_) => self.draw(),
+            winit::event::Event::RedrawRequested(_) => self.draw().unwrap(),
             _ => (),
         }
     }
@@ -71,16 +83,12 @@ impl App {
         if self.input_manager.is_key_pressed(KeyCode::Escape) {
             self.should_exit = true
         }
-
-        let mut x = 0;
-        for i in 1..100000 {
-            x += x % i
-        }
-
-        println!("{:?} FPS", self.fps())
     }
 
-    fn draw(&mut self) {}
+    fn draw(&mut self) -> anyhow::Result<()> {
+        self.renderer.render()?;
+        Ok(())
+    }
 
     fn time_since_start(&self) -> time::Duration {
         time::Instant::now() - self.start_instant

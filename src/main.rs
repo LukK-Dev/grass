@@ -1,9 +1,14 @@
 mod app;
 mod input_manager;
+mod renderer;
+mod timer;
 
 use app::App;
 
-fn main() {
-    let app = App::new().unwrap();
+#[tokio::main]
+async fn main() {
+    let app = App::new()
+        .await
+        .unwrap_or_else(|err| panic!("Failed to create App: {}", err));
     app.run();
 }
