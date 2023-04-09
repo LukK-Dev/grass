@@ -25,7 +25,7 @@ impl Timing {
         Instant::now() - self.last_frame_instant
     }
 
-    fn fps(&self) -> u32 {
+    pub fn fps(&self) -> u32 {
         (1.0 / self.time_delta().as_secs_f32()) as u32
     }
 }

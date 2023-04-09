@@ -1,8 +1,11 @@
 use anyhow::anyhow;
 use wgpu::{
-    Adapter, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, Instance, Limits,
-    LoadOp, Operations, Queue, RenderPassDescriptor, RequestAdapterOptionsBase, Surface,
-    SurfaceConfiguration, TextureViewDescriptor,
+    Adapter, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, Device,
+    DeviceDescriptor, Features, FragmentState, FrontFace, Instance, Limits, LoadOp,
+    MultisampleState, Operations, PipelineLayoutDescriptor, PolygonMode, PrimitiveState,
+    PrimitiveTopology, Queue, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
+    RequestAdapterOptionsBase, ShaderModuleDescriptor, ShaderSource, Surface, SurfaceConfiguration,
+    TextureFormat, TextureViewDescriptor, VertexState,
 };
 
 const CLEAR_COLOR: wgpu::Color = Color {
@@ -19,6 +22,7 @@ pub struct Renderer {
     adapter: Adapter,
     device: Device,
     queue: Queue,
+    render_pipeline: RenderPipeline,
 }
 
 impl Renderer {
@@ -36,7 +40,7 @@ impl Renderer {
             .request_device(
                 &DeviceDescriptor {
                     label: Some("device"),
-                    features: Features::default(),
+                    features: Features::empty(),
                     limits: Limits::default(),
                 },
                 None,
@@ -62,6 +66,43 @@ impl Renderer {
         };
         surface.configure(&device, &surface_config);
 
+        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("shader_module"),
+            source: ShaderSource::Wgsl(std::borrow::Cow::from(include_str!(
+                "./shaders/shader.wgsl"
+            ))),
+        });
+        let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some("render_pipeline"),
+            layout: None,
+            vertex: VertexState {
+                module: &shader_module,
+                entry_point: "vs_main",
+                buffers: &[],
+            },
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: MultisampleState::default(),
+            fragment: Some(FragmentState {
+                module: &shader_module,
+                entry_point: "fs_main",
+                targets: &[Some(ColorTargetState {
+                    format: TextureFormat::Bgra8UnormSrgb,
+                    blend: None,
+                    write_mask: ColorWrites::ALL,
+                })],
+            }),
+            multiview: None,
+        });
+
         Ok(Self {
             instance,
             surface,
@@ -69,6 +110,7 @@ impl Renderer {
             device,
             queue,
             surface_config,
+            render_pipeline,
         })
     }
 
@@ -95,7 +137,7 @@ impl Renderer {
             });
 
         {
-            let _render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &texture_view,
@@ -107,6 +149,9 @@ impl Renderer {
                 })],
                 depth_stencil_attachment: None,
             });
+
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.draw(0..10000, 0..10000);
         }
 
         self.queue.submit(std::iter::once(command_encoder.finish()));
