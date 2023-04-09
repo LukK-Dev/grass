@@ -72,6 +72,8 @@ impl Renderer {
             view_formats: vec![],
         };
         surface.configure(&device, &surface_config);
+
+        // let diffuse_bytes = include_bytes!("../res/cube.png");
         let render_pipeline =
             Self::create_render_pipeline(&device, include_str!("./shaders/shader.wgsl"));
         let circle_mesh = Mesh::create_circle(100).unwrap();

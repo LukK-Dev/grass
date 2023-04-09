@@ -18,7 +18,10 @@ pub struct App {
 
 impl App {
     pub async fn new() -> anyhow::Result<Self> {
-        tracing_subscriber::fmt::init();
+        let filter = tracing_subscriber::filter::EnvFilter::new("warn,grass=trace");
+        tracing_subscriber::fmt::fmt()
+            .with_env_filter(filter)
+            .init();
 
         let event_loop = event_loop::EventLoop::new();
         let window = window::WindowBuilder::new().build(&event_loop)?;
