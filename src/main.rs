@@ -1,5 +1,6 @@
 mod app;
 mod input_manager;
+mod model;
 mod renderer;
 mod timer;
 mod timing;

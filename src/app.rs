@@ -5,7 +5,7 @@ use crate::{
     timing::Timing,
 };
 use log::info;
-use winit::{dpi::Position, event_loop, window};
+use winit::{event_loop, window};
 
 pub struct App {
     event_loop: Option<event_loop::EventLoop<()>>,
@@ -14,7 +14,6 @@ pub struct App {
     input_manager: InputManager,
     should_exit: bool,
     timing: Timing,
-    fps_timer: Timer,
 }
 
 impl App {
@@ -28,18 +27,14 @@ impl App {
         let renderer = Renderer::new(&window).await?;
 
         let input_manager = InputManager::new();
-        let should_exit = false;
         let timing = Timing::new();
-        let mut fps_timer = Timer::new(std::time::Duration::from_secs(1), true);
-        fps_timer.start();
         Ok(Self {
             event_loop,
             window,
             renderer,
             input_manager,
-            should_exit,
+            should_exit: false,
             timing,
-            fps_timer,
         })
     }
 
@@ -83,11 +78,13 @@ impl App {
         if self.input_manager.is_key_pressed(KeyCode::Escape) {
             self.should_exit = true
         }
-        self.fps_timer.update(self.timing.time_delta());
-
-        if self.fps_timer.finished() {
-            info!("FPS: {}", self.timing.fps());
+        if self.input_manager.is_key_just_pressed(KeyCode::F11) {
+            self.window
+                .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
         }
+
+        self.window
+            .set_title(&format!("FPS: {}", self.timing.fps()));
 
         self.input_manager.clear();
         self.timing.update();
