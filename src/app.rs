@@ -82,8 +82,7 @@ impl App {
             self.should_exit = true
         }
         if self.input_manager.is_key_just_pressed(KeyCode::F11) {
-            self.window
-                .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
+            self.window.set_maximized(!self.window.is_maximized())
         }
 
         self.window

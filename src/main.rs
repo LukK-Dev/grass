@@ -1,4 +1,5 @@
 mod app;
+mod camera;
 mod input_manager;
 mod model;
 mod renderer;

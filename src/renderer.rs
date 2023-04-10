@@ -64,52 +64,12 @@ impl Renderer {
         };
         surface.configure(&device, &surface_config);
 
-        let diffuse_bytes = include_bytes!("../res/tree.png");
-        let diffuse_image = image::load_from_memory(diffuse_bytes)?;
-        let diffuse_rgb = diffuse_image.to_rgba8();
-        let dimensions = diffuse_rgb.dimensions();
-        let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        };
-        let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("diffuse_texture"),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &diffuse_rgb,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
-                rows_per_image: std::num::NonZeroU32::new(dimensions.1),
-            },
-            texture_size,
-        );
-        let diffuse_texture_view =
-            diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("diffuse_sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let diffuse_texture = crate::texture::Texture::from_bytes(
+            &device,
+            &queue,
+            wgpu::FilterMode::Linear,
+            include_bytes!("../res/cube.png"),
+        )?;
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("texture_bind_group"),
@@ -138,11 +98,11 @@ impl Renderer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
                 },
             ],
         });
@@ -159,11 +119,11 @@ impl Renderer {
             include_str!("./shaders/shader.wgsl"),
         );
         // let circle_mesh = Mesh::create_circle(3)?;
-        // let mesh = Mesh::create_rectangle();
-        // let vertex_buffer = Self::create_vertex_buffer(&device, &mesh.vertices);
-        // let index_buffer = Self::create_index_buffer(&device, &mesh.indices);
-        let vertex_buffer = Self::create_vertex_buffer(&device, crate::model::VERTICES);
-        let index_buffer = Self::create_index_buffer(&device, &[0, 1, 2, 0, 2, 3, 0, 3, 4]);
+        let mesh = Mesh::create_rectangle();
+        let vertex_buffer = Self::create_vertex_buffer(&device, &mesh.vertices);
+        let index_buffer = Self::create_index_buffer(&device, &mesh.indices);
+        // let vertex_buffer = Self::create_vertex_buffer(&device, crate::model::VERTICES);
+        // let index_buffer = Self::create_index_buffer(&device, &[0, 1, 2, 0, 2, 3, 0, 3, 4]);
 
         Ok(Self {
             instance,

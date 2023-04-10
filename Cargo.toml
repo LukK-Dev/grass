@@ -8,9 +8,9 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.70"
 bytemuck = { version = "1.13.1", features = ["derive"] }
+cgmath = "0.18.0"
 image = { version = "0.24.6", features = ["png", "jpeg"] }
 log = "0.4.17"
-nalgebra-glm = "0.18.0"
 rand = "0.8.5"
 thiserror = "1.0.40"
 tokio = { version = "1.27.0", features = ["full"] }
