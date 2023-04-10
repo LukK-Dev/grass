@@ -1,19 +1,9 @@
 use anyhow::anyhow;
-use log::{debug, warn};
-use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
-    Adapter, BlendState, Buffer, BufferAddress, BufferUsages, Color, ColorTargetState, ColorWrites,
-    CommandEncoderDescriptor, Device, DeviceDescriptor, Features, FragmentState, FrontFace,
-    IndexFormat, Instance, Limits, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor,
-    PolygonMode, PrimitiveState, PrimitiveTopology, Queue, RenderPassDescriptor, RenderPipeline,
-    RenderPipelineDescriptor, RequestAdapterOptionsBase, ShaderModuleDescriptor, ShaderSource,
-    Surface, SurfaceConfiguration, TextureFormat, TextureViewDescriptor, VertexAttribute,
-    VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
-};
+use wgpu::util::DeviceExt;
 
 use crate::model::{Mesh, Vertex};
 
-const CLEAR_COLOR: wgpu::Color = Color {
+const CLEAR_COLOR: wgpu::Color = wgpu::Color {
     r: 0.85,
     g: 0.8,
     b: 1.0,
@@ -21,23 +11,24 @@ const CLEAR_COLOR: wgpu::Color = Color {
 };
 
 pub struct Renderer {
-    instance: Instance,
-    surface: Surface,
-    surface_config: SurfaceConfiguration,
-    adapter: Adapter,
-    device: Device,
-    queue: Queue,
-    render_pipeline: RenderPipeline,
-    vertex_buffer: Buffer,
-    index_buffer: Buffer,
+    instance: wgpu::Instance,
+    surface: wgpu::Surface,
+    surface_config: wgpu::SurfaceConfiguration,
+    adapter: wgpu::Adapter,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    render_pipeline: wgpu::RenderPipeline,
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    diffuse_bind_group: wgpu::BindGroup,
 }
 
 impl Renderer {
     pub async fn new(target: &winit::window::Window) -> anyhow::Result<Self> {
-        let instance = Instance::default();
+        let instance = wgpu::Instance::default();
         let surface = unsafe { instance.create_surface(target) }?;
         let adapter = instance
-            .request_adapter(&RequestAdapterOptionsBase {
+            .request_adapter(&wgpu::RequestAdapterOptionsBase {
                 compatible_surface: Some(&surface),
                 ..Default::default()
             })
@@ -45,10 +36,10 @@ impl Renderer {
             .ok_or_else(|| anyhow!("Failed to request adapter."))?;
         let (device, queue) = adapter
             .request_device(
-                &DeviceDescriptor {
+                &wgpu::DeviceDescriptor {
                     label: Some("device"),
-                    features: Features::empty(),
-                    limits: Limits::default(),
+                    features: wgpu::Features::empty(),
+                    limits: wgpu::Limits::default(),
                 },
                 None,
             )
@@ -62,7 +53,7 @@ impl Renderer {
             .filter(|f| f.describe().srgb)
             .next()
             .unwrap_or(surface_capabilities.formats[0]);
-        let surface_config = SurfaceConfiguration {
+        let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: target.inner_size().width,
@@ -73,12 +64,106 @@ impl Renderer {
         };
         surface.configure(&device, &surface_config);
 
-        // let diffuse_bytes = include_bytes!("../res/cube.png");
-        let render_pipeline =
-            Self::create_render_pipeline(&device, include_str!("./shaders/shader.wgsl"));
-        let circle_mesh = Mesh::create_circle(100).unwrap();
-        let vertex_buffer = Self::create_vertex_buffer(&device, &circle_mesh.vertices);
-        let index_buffer = Self::create_index_buffer(&device, &circle_mesh.indices);
+        let diffuse_bytes = include_bytes!("../res/tree.png");
+        let diffuse_image = image::load_from_memory(diffuse_bytes)?;
+        let diffuse_rgb = diffuse_image.to_rgba8();
+        let dimensions = diffuse_rgb.dimensions();
+        let texture_size = wgpu::Extent3d {
+            width: dimensions.0,
+            height: dimensions.1,
+            depth_or_array_layers: 1,
+        };
+        let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("diffuse_texture"),
+            size: texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &diffuse_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &diffuse_rgb,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0),
+                rows_per_image: std::num::NonZeroU32::new(dimensions.1),
+            },
+            texture_size,
+        );
+        let diffuse_texture_view =
+            diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("diffuse_sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("texture_bind_group"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+        let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("diffuse_bind_group"),
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+                },
+            ],
+        });
+
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("render_pipeline_layout"),
+                bind_group_layouts: &[&texture_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+        let render_pipeline = Self::create_render_pipeline(
+            &device,
+            &render_pipeline_layout,
+            include_str!("./shaders/shader.wgsl"),
+        );
+        // let circle_mesh = Mesh::create_circle(3)?;
+        // let mesh = Mesh::create_rectangle();
+        // let vertex_buffer = Self::create_vertex_buffer(&device, &mesh.vertices);
+        // let index_buffer = Self::create_index_buffer(&device, &mesh.indices);
+        let vertex_buffer = Self::create_vertex_buffer(&device, crate::model::VERTICES);
+        let index_buffer = Self::create_index_buffer(&device, &[0, 1, 2, 0, 2, 3, 0, 3, 4]);
 
         Ok(Self {
             instance,
@@ -90,6 +175,7 @@ impl Renderer {
             render_pipeline,
             vertex_buffer,
             index_buffer,
+            diffuse_bind_group,
         })
     }
 
@@ -108,21 +194,21 @@ impl Renderer {
         let output = self.surface.get_current_texture()?;
         let texture_view = output
             .texture
-            .create_view(&TextureViewDescriptor::default());
-        let mut command_encoder = self
-            .device
-            .create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("command_encoder"),
-            });
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut command_encoder =
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("command_encoder"),
+                });
 
         {
-            let mut render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &texture_view,
                     resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(CLEAR_COLOR),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(CLEAR_COLOR),
                         store: true,
                     },
                 })],
@@ -130,8 +216,9 @@ impl Renderer {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint32);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(
                 0..self.index_buffer.size() as u32 / std::mem::size_of::<u32>() as u32,
                 0,
@@ -146,56 +233,60 @@ impl Renderer {
     }
 
     // assumes the entry points of the shader are vs_main and fs_main respectively
-    fn create_render_pipeline(device: &Device, shader_source: &str) -> RenderPipeline {
-        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+    fn create_render_pipeline(
+        device: &wgpu::Device,
+        layout: &wgpu::PipelineLayout,
+        shader_source: &str,
+    ) -> wgpu::RenderPipeline {
+        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("shader_module"),
-            source: ShaderSource::Wgsl(std::borrow::Cow::from(shader_source)),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::from(shader_source)),
         });
-        device.create_render_pipeline(&RenderPipelineDescriptor {
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("render_pipeline"),
-            layout: None,
-            vertex: VertexState {
+            layout: Some(layout),
+            vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_main",
                 buffers: &[Vertex::vertex_buffer_layout()],
             },
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
-                front_face: FrontFace::Ccw,
+                front_face: wgpu::FrontFace::Ccw,
                 cull_mode: None,
                 unclipped_depth: false,
-                polygon_mode: PolygonMode::Fill,
+                polygon_mode: wgpu::PolygonMode::Fill,
                 conservative: false,
             },
             depth_stencil: None,
-            multisample: MultisampleState::default(),
-            fragment: Some(FragmentState {
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
                 module: &shader_module,
                 entry_point: "fs_main",
-                targets: &[Some(ColorTargetState {
-                    format: TextureFormat::Bgra8UnormSrgb,
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: ColorWrites::ALL,
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             multiview: None,
         })
     }
 
-    fn create_vertex_buffer(device: &Device, vertices: &[Vertex]) -> Buffer {
-        device.create_buffer_init(&BufferInitDescriptor {
+    fn create_vertex_buffer(device: &wgpu::Device, vertices: &[Vertex]) -> wgpu::Buffer {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex_buffer"),
             contents: bytemuck::cast_slice(vertices),
-            usage: BufferUsages::VERTEX,
+            usage: wgpu::BufferUsages::VERTEX,
         })
     }
 
-    fn create_index_buffer(device: &Device, indices: &[u32]) -> Buffer {
-        device.create_buffer_init(&BufferInitDescriptor {
+    fn create_index_buffer(device: &wgpu::Device, indices: &[u32]) -> wgpu::Buffer {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("index_buffer"),
             contents: bytemuck::cast_slice(indices),
-            usage: BufferUsages::INDEX,
+            usage: wgpu::BufferUsages::INDEX,
         })
     }
 }
