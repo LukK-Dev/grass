@@ -6,12 +6,19 @@ struct VertexInput {
 struct VertexOuput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
-};
+}
+
+struct CameraUniform {
+    view_projection_matrix: mat4x4<f32>
+}
+
+@group(1) @binding(0)
+var<uniform> camera: CameraUniform;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOuput {
     var out: VertexOuput;
-    out.clip_position = vec4<f32>(in.position, 1.0);
+    out.clip_position = camera.view_projection_matrix * vec4<f32>(in.position, 1.0);
     out.tex_coords = in.tex_coords;
     return out;
 }
