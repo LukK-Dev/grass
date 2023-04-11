@@ -278,7 +278,7 @@ impl From<winit::event::VirtualKeyCode> for KeyCode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum MouseButton {
+pub enum MouseButton {
     Left,
     Right,
     MouseWheel,
