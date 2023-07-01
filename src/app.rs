@@ -85,6 +85,8 @@ impl App {
             self.window.set_maximized(!self.window.is_maximized())
         }
 
+        self.renderer.update(&self.input_manager, &self.timing);
+
         self.window
             .set_title(&format!("FPS: {}", self.timing.fps()));
 
